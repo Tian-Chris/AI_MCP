@@ -1,0 +1,6 @@
+.env
+.venv/
+__pycache__/
+*.pyc
+obj_dir/
+*.vcd

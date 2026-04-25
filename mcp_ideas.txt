@@ -1,0 +1,40 @@
+Tier 1 — Primitives (must have)
+
+list_signals(scope?, pattern?) — discover signal names, widths, types
+get_signal_value(signal, time) — point query, single signal at single time
+get_signals_at(signals[], time) — snapshot, many signals at one time
+find_transitions(signal, edge?, window?) — edge detection (rising/falling/any/to=val/from=val)
+find_condition(expr, window?) — find times where boolean expression holds
+sample_on_clock(signals[], clock, from_cycle, to_cycle) — cycle-stepped table walk
+
+Tier 2 — Assertion-shaped (high leverage)
+
+check_invariant(expr, window?) — expression should always hold
+check_sequence(antecedent, consequent, within_cycles, window?) — a |-> ##[0:n] b
+check_response(trigger, response, min_cycles, max_cycles, window?) — bounded request/ack
+check_stable(signal, while_expr, window?) — signal unchanged while condition holds
+diff_waveforms(other_vcd, signals?, window?) — first divergence vs golden run
+
+Tier 3 — Analysis (nice to have)
+
+signal_stats(signal, window?) — toggle count, time-at-value, min/max
+find_glitches(signal, min_pulse_cycles=1) — narrow pulses
+get_hierarchy() — module tree
+set_defaultclock(signal) — session-level clock for check* tools
+
+Skip for v1
+
+decode_state (needs RTL parse)
+trace_back (needs RTL parse, big build)
+check_assertion(sva_string) (would need SVA parser)
+Coverage tools, multi-clock assertions
+
+Cross-cutting (every tool)
+
+vcd_path? — defaults to current run
+time — accepts "1240ns" or "@cycle 124"
+format? — hex|bin|dec|signed, hex default
+max_results? — default 50, cap 500
+Expression language shared across findcondition and all check*, with prev(signal, n) for cycle-relative comparison
+
+Total: 11 tools for v1 (Tier 1 + Tier 2), 15 if Tier 3 fits.

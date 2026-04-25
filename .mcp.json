@@ -1,0 +1,12 @@
+{
+  "mcpServers": {
+    "verilator": {
+      "command": "/Users/chris/Desktop/AI_MCP/.venv/bin/python",
+      "args": ["/Users/chris/Desktop/AI_MCP/verilator_mcp.py"]
+    },
+    "waveform": {
+      "command": "/Users/chris/Desktop/AI_MCP/.venv/bin/python",
+      "args": ["/Users/chris/Desktop/AI_MCP/waveform_mcp.py"]
+    }
+  }
+}

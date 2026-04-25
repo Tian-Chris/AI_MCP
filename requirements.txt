@@ -1,0 +1,7 @@
+anthropic>=0.40.0
+mcp>=1.0.0
+python-dotenv>=1.0.0
+vcdvcd>=2.6.0
+litellm>=1.50
+keyring>=24.0
+prompt_toolkit>=3.0
