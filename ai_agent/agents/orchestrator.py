@@ -1,13 +1,19 @@
 """Top-level orchestrator. Drives the phase machine via tool calls."""
 from __future__ import annotations
 import json
+import os
 from pathlib import Path
 from typing import Callable, Optional
+
+from rich.console import Console
 
 from ai_agent.session import Session, Phase
 from ai_agent.llm import LLMClient
 from ai_agent.agents import spec, writers, tester
 from ai_agent import tools as agent_tools
+
+_console = Console()
+_VERBOSE = os.environ.get("AI_MCP_VERBOSE", "").strip().lower() in ("1", "true", "yes")
 
 
 # 5 tools total: 3 phase-transition + 2 read-only file
@@ -147,19 +153,20 @@ def _build_tools_and_handlers(session: Session, root: Path):
     return tool_defs, handlers
 
 
-def run_orchestrator_turn(
+def _run_orchestrator_inner(
     session: Session,
     llm: LLMClient,
-    root: Path,
-    max_inner_turns: int = 20,
-    on_event: Optional[Callable[[dict], None]] = None,
+    system: str,
+    tool_defs: list,
+    handlers: dict,
+    max_inner_turns: int,
+    on_event: Optional[Callable[[dict], None]],
+    status,
 ) -> str:
-    """Run the orchestrator loop until end_turn or max_inner_turns. Mutates session.
-    Returns the final assistant text."""
-    system = _load_system_prompt()
-    tool_defs, handlers = _build_tools_and_handlers(session, root)
-
+    """Inner loop — drives the orchestrator until end_turn or max_inner_turns."""
     for _ in range(max_inner_turns):
+        if status:
+            status.update("[dim]Thinking...[/dim]")
         response = llm.call(system, session.messages, tool_defs, max_tokens=8000)
 
         # Build OpenAI-style tool_calls list for the assistant message
@@ -187,6 +194,8 @@ def run_orchestrator_turn(
         for tc in response.tool_calls:
             if on_event:
                 on_event({"type": "tool_call", "name": tc.name, "input": tc.input})
+            if status:
+                status.update(f"[dim]Running {tc.name}...[/dim]")
             try:
                 result_text = handlers[tc.name](tc.input)
                 ok = True
@@ -201,3 +210,20 @@ def run_orchestrator_turn(
                 on_event({"type": "tool_result", "name": tc.name, "ok": ok})
 
     return "(hit max_inner_turns without end_turn)"
+
+
+def run_orchestrator_turn(
+    session: Session,
+    llm: LLMClient,
+    root: Path,
+    max_inner_turns: int = 20,
+    on_event: Optional[Callable[[dict], None]] = None,
+) -> str:
+    """Run the orchestrator loop until end_turn or max_inner_turns. Mutates session.
+    Returns the final assistant text."""
+    system = _load_system_prompt()
+    tool_defs, handlers = _build_tools_and_handlers(session, root)
+    if _VERBOSE:
+        return _run_orchestrator_inner(session, llm, system, tool_defs, handlers, max_inner_turns, on_event, status=None)
+    with _console.status("[dim]Thinking...[/dim]", spinner="dots") as status:
+        return _run_orchestrator_inner(session, llm, system, tool_defs, handlers, max_inner_turns, on_event, status=status)

@@ -1,11 +1,21 @@
 """REPL entry point for the AI_MCP agent — prompt_toolkit-based interactive shell."""
 import argparse
 import json
+import os
 import sys
+import traceback
 from pathlib import Path
 
 from prompt_toolkit import PromptSession
 from prompt_toolkit.history import InMemoryHistory
+from rich.console import Console
+from rich.markdown import Markdown
+from rich.panel import Panel
+from rich.table import Table
+from rich.text import Text
+from rich import box
+
+_console = Console()
 
 from ai_agent.agents.orchestrator import run_orchestrator_turn
 from .session import Session, Phase
@@ -13,10 +23,19 @@ from .llm import LLMClient
 from . import config
 
 # ---------------------------------------------------------------------------
+# Verbose mode — set AI_MCP_VERBOSE=1/true/yes to enable diagnostic prints
+# ---------------------------------------------------------------------------
+
+_VERBOSE = os.environ.get("AI_MCP_VERBOSE", "").strip().lower() in ("1", "true", "yes")
+
+
+# ---------------------------------------------------------------------------
 # Event printer (stderr so it doesn't pollute assistant text on stdout)
 # ---------------------------------------------------------------------------
 
 def _print_event(event: dict) -> None:
+    if not _VERBOSE:
+        return
     t = event.get("type")
     if t == "tool_call":
         raw = json.dumps(event.get("input", {}))
@@ -177,10 +196,17 @@ def handle_slash(
 # Public entry point
 # ---------------------------------------------------------------------------
 
+def _short_model(model: str) -> str:
+    """Strip 'anthropic/claude-' prefix for compact display."""
+    prefix = "anthropic/claude-"
+    if model.startswith(prefix):
+        return model[len(prefix):]
+    return model
+
+
 def run(args: argparse.Namespace) -> None:
     """Main REPL entry point. args: orchestrator_model, spec_model, writer_model,
     root (Path), api_key (str|None), provider (str|None)."""
-    print("AI_MCP REPL — type /help for commands, /exit to quit")
 
     # Resolve orchestrator key
     orchestrator_model: str = args.orchestrator_model
@@ -205,18 +231,54 @@ def run(args: argparse.Namespace) -> None:
 
     root: Path = getattr(args, "root", Path.cwd())
 
+    # Build cwd line — collapse $HOME to ~
+    cwd = Path.cwd()
+    try:
+        cwd_str = "~/" + str(cwd.relative_to(Path.home()))
+    except ValueError:
+        cwd_str = str(cwd)
+
+    logo = Text(
+        "████████\n"
+        "████████\n"
+        "████████\n"
+        "████████",
+        style="cyan on cyan",
+    )
+
+    info = Text()
+    info.append(f"orchestrator : {_short_model(session.models['orchestrator'])}\n")
+    info.append(f"spec         : {_short_model(session.models['spec'])}\n")
+    info.append(f"writer       : {_short_model(session.models['writer'])}\n")
+    info.append(f"cwd          : {cwd_str}\n\n")
+    info.append("type /help for commands, /exit to quit")
+
+    grid = Table.grid(padding=(0, 3))
+    grid.add_column()
+    grid.add_column()
+    grid.add_row(logo, info)
+
+    panel = Panel(
+        grid,
+        title="[bold]AI_MCP — RTL agent[/bold]",
+        box=box.ROUNDED,
+        padding=(1, 2),
+    )
+    _console.print(panel)
+
     # Prompt-toolkit session for readline-like history
     ps: PromptSession = PromptSession(history=InMemoryHistory())
 
     while True:
+        orch_short = _short_model(session.models.get("orchestrator", orchestrator_model))
         try:
-            text = ps.prompt(f"[{session.phase.value}]> ")
+            text = ps.prompt(f"[{session.phase.value} | {orch_short}]> ")
         except EOFError:
             print("\nbye")
             return
         except KeyboardInterrupt:
-            print("\nbye")
-            return
+            print("\n^C  (interrupted — type /exit to quit)")
+            continue
 
         text = text.strip()
         if not text:
@@ -232,6 +294,11 @@ def run(args: argparse.Namespace) -> None:
         try:
             reply = run_orchestrator_turn(session, llm_container[0], root, on_event=_print_event)
             if reply:
-                print(reply)
+                _console.print(Markdown(reply))
         except KeyboardInterrupt:
-            print("\n(turn interrupted)")
+            print("\n^C  (interrupted — type /exit to quit)")
+        except Exception as e:
+            if _VERBOSE:
+                traceback.print_exc(file=sys.stderr)
+            else:
+                print(f"error: {e}", file=sys.stderr)

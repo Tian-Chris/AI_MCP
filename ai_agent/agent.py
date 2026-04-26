@@ -4,9 +4,15 @@ Verilator/waveform MCP tools. Single-shot CLI preserved; core loop exposed as ru
 future REPL use."""
 import argparse
 import json
+import os
 import sys
 from pathlib import Path
 from typing import Callable, Optional
+
+from rich.console import Console
+
+_console = Console(stderr=True)
+_VERBOSE = os.environ.get("AI_MCP_VERBOSE", "").strip().lower() in ("1", "true", "yes")
 
 # Ensure repo root is on sys.path so `from ai_agent.*` works regardless of cwd or PYTHONPATH.
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
@@ -17,20 +23,19 @@ from ai_agent.system_prompt import SYSTEM_PROMPT
 from ai_agent.tools import TOOL_DEFS, execute_tool
 
 
-def run_turn(
+def _run_turn_inner(
     session: Session,
     llm: LLMClient,
-    tools: list[dict],          # Anthropic-style TOOL_DEFS — llm.py handles conversion
-    system: str,                 # SYSTEM_PROMPT
-    root: Path,                  # for tool sandbox via execute_tool
-    max_inner_turns: int = 30,
-    on_event: Optional[Callable[[dict], None]] = None,
+    tools: list[dict],
+    system: str,
+    root: Path,
+    max_inner_turns: int,
+    on_event: Optional[Callable[[dict], None]],
+    status,  # rich.status.Status or None
 ) -> str:
-    """Run the agentic loop until end_turn or max_inner_turns. Returns the final assistant text.
-    The session is mutated in place — new messages are appended.
-    on_event (optional) gets called for observability: {"type": "tool_call", "name", "input"} or
-    {"type": "tool_result", "name", "ok": bool} etc."""
     for _ in range(max_inner_turns):
+        if status:
+            status.update("[dim]Thinking...[/dim]")
         response = llm.call(system, session.messages, tools, max_tokens=8000)
 
         # Build the OpenAI-style tool_calls list for the assistant message
@@ -58,6 +63,8 @@ def run_turn(
         for tc in response.tool_calls:
             if on_event:
                 on_event({"type": "tool_call", "name": tc.name, "input": tc.input})
+            if status:
+                status.update(f"[dim]Running {tc.name}...[/dim]")
             result_text = execute_tool(tc.name, tc.input, root)
             session.add_tool_result(tc.id, result_text)
             if on_event:
@@ -65,6 +72,25 @@ def run_turn(
 
     # fell through max_inner_turns
     return "(hit max_inner_turns without end_turn)"
+
+
+def run_turn(
+    session: Session,
+    llm: LLMClient,
+    tools: list[dict],          # Anthropic-style TOOL_DEFS — llm.py handles conversion
+    system: str,                 # SYSTEM_PROMPT
+    root: Path,                  # for tool sandbox via execute_tool
+    max_inner_turns: int = 30,
+    on_event: Optional[Callable[[dict], None]] = None,
+) -> str:
+    """Run the agentic loop until end_turn or max_inner_turns. Returns the final assistant text.
+    The session is mutated in place — new messages are appended.
+    on_event (optional) gets called for observability: {"type": "tool_call", "name", "input"} or
+    {"type": "tool_result", "name", "ok": bool} etc."""
+    if _VERBOSE:
+        return _run_turn_inner(session, llm, tools, system, root, max_inner_turns, on_event, status=None)
+    with _console.status("[dim]Thinking...[/dim]", spinner="dots") as status:
+        return _run_turn_inner(session, llm, tools, system, root, max_inner_turns, on_event, status=status)
 
 
 def _cli():
@@ -89,8 +115,10 @@ def _cli():
     session = Session(models={"orchestrator": model})
     session.add_user(args.task)
 
+    _verbose = os.environ.get("AI_MCP_VERBOSE", "").strip().lower() in ("1", "true", "yes")
+
     def event(e):
-        if e["type"] == "tool_call":
+        if _verbose and e["type"] == "tool_call":
             print(f"  → {e['name']}({json.dumps(e['input'])[:80]})", file=sys.stderr)
 
     text = run_turn(session, llm, TOOL_DEFS, SYSTEM_PROMPT, args.root, args.max_turns, on_event=event)

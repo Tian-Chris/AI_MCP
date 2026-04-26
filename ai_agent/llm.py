@@ -1,10 +1,27 @@
 """Provider-agnostic LLM client wrapping litellm for the RTL agent."""
 import copy
 import json
+import logging
+import os
 from dataclasses import dataclass, field
 from typing import Any, Optional
 
+_verbose = os.environ.get("AI_MCP_VERBOSE", "").strip().lower() in ("1", "true", "yes")
+
+if not _verbose:
+    os.environ.setdefault("LITELLM_LOG", "ERROR")
+
 import litellm
+
+if not _verbose:
+    litellm.suppress_debug_info = True
+    logging.getLogger("LiteLLM").setLevel(logging.WARNING)
+    logging.getLogger("httpx").setLevel(logging.WARNING)
+    logging.getLogger("httpcore").setLevel(logging.WARNING)
+    logging.getLogger("openai").setLevel(logging.WARNING)
+    logging.getLogger("anthropic").setLevel(logging.WARNING)
+else:
+    logging.getLogger("LiteLLM").setLevel(logging.INFO)
 
 
 @dataclass
