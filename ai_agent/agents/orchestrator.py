@@ -100,9 +100,10 @@ def _build_tools_and_handlers(session: Session, root: Path):
         session.last_test = result
         stdout_tail = (result.stdout or "")[-1500:]
         stderr_tail = (result.stderr or "")[-1500:]
-        if getattr(result, "waveform_path", None) is not None:
-            from ai_agent._display import show_waveform
-            show_waveform(result.waveform_path)
+        session.tests = list(result.tests)
+        if session.tests:
+            from ai_agent._display import show_test_dashboard
+            show_test_dashboard(session.tests)
         if result.passed:
             session.reset_retry()
             session.set_phase(Phase.IDLE)

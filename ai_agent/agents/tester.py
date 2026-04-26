@@ -10,7 +10,53 @@ _repo_root = Path(__file__).parent.parent.parent
 sys.path.insert(0, str(_repo_root))
 import verilator_mcp  # noqa: E402
 
-from ai_agent.session import TestResult  # noqa: E402
+from ai_agent.session import TestResult, TestStatus  # noqa: E402
+
+
+def _parse_test_markers(stdout: str) -> list[TestStatus]:
+    """Parse $display markers in sim stdout into per-test statuses.
+
+    Recognized markers:
+      TESTS: name1,name2,name3       -> declares the full test set (statuses default to pending)
+      TEST_PASS: <name>              -> marks <name> as verified
+      TEST_FAIL: <name>: <reason>    -> marks <name> as failed with reason
+    """
+    declared: list[str] = []
+    statuses: dict[str, TestStatus] = {}
+
+    for raw in stdout.splitlines():
+        line = raw.strip()
+        if line.startswith("TESTS:"):
+            payload = line[len("TESTS:"):].strip()
+            for n in payload.split(","):
+                name = n.strip()
+                if name and name not in statuses:
+                    declared.append(name)
+                    statuses[name] = TestStatus(name=name, status="pending")
+        elif line.startswith("TEST_PASS:"):
+            name = line[len("TEST_PASS:"):].strip()
+            if name:
+                if name not in statuses:
+                    declared.append(name)
+                    statuses[name] = TestStatus(name=name)
+                statuses[name].status = "verified"
+                statuses[name].reason = ""
+        elif line.startswith("TEST_FAIL:"):
+            payload = line[len("TEST_FAIL:"):].strip()
+            if ":" in payload:
+                name, reason = payload.split(":", 1)
+                name = name.strip()
+                reason = reason.strip()
+            else:
+                name, reason = payload.strip(), ""
+            if name:
+                if name not in statuses:
+                    declared.append(name)
+                    statuses[name] = TestStatus(name=name)
+                statuses[name].status = "failed"
+                statuses[name].reason = reason
+
+    return [statuses[n] for n in declared]
 
 
 def _resolve(path_str: str, root: Path) -> str:
@@ -100,21 +146,28 @@ def run_tests(spec: dict[str, Any], root: Path) -> TestResult:
         return TestResult(phase="sim", passed=False, stderr=str(e))
 
     if not run_result.get("ok"):
+        sim_stdout = run_result.get("stdout", "")
+        parsed = _parse_test_markers(sim_stdout)
         return TestResult(
             phase="sim",
             passed=False,
-            stdout=run_result.get("stdout", ""),
+            stdout=sim_stdout,
             stderr=run_result.get("stderr", ""),
+            tests=parsed,
         )
 
     # ------------------------------------------------------------------
     # All green
     # ------------------------------------------------------------------
     waveform = root / "wave.vcd"
+    success_stdout = run_result.get("stdout", "")
+    parsed = _parse_test_markers(success_stdout)
+    any_failed = any(t.status == "failed" for t in parsed)
     return TestResult(
-        phase="pass",
-        passed=True,
-        stdout=run_result.get("stdout", ""),
+        phase="sim" if any_failed else "pass",
+        passed=not any_failed,
+        stdout=success_stdout,
         stderr="",
         waveform_path=waveform if waveform.exists() else None,
+        tests=parsed,
     )

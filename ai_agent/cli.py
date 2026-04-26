@@ -8,6 +8,7 @@ from pathlib import Path
 
 from prompt_toolkit import PromptSession
 from prompt_toolkit.history import InMemoryHistory
+from prompt_toolkit.formatted_text import HTML
 from rich.markdown import Markdown
 from rich.panel import Panel
 from rich.text import Text
@@ -248,18 +249,24 @@ def run(args: argparse.Namespace) -> None:
         cwd_str = str(cwd)
 
     info = Text()
-    info.append(f"orchestrator : {_short_model(session.models['orchestrator'])}\n")
-    info.append(f"spec         : {_short_model(session.models['spec'])}\n")
-    info.append(f"writer       : {_short_model(session.models['writer'])}\n")
-    info.append(f"cwd          : {cwd_str}\n\n")
+    info.append("orchestrator : ", style="green")
+    info.append(f"{_short_model(session.models['orchestrator'])}\n")
+    info.append("spec         : ", style="green")
+    info.append(f"{_short_model(session.models['spec'])}\n")
+    info.append("writer       : ", style="green")
+    info.append(f"{_short_model(session.models['writer'])}\n")
+    info.append("cwd          : ", style="green")
+    info.append(f"{cwd_str}\n\n")
     info.append("type /help for commands, /exit to quit")
 
     panel = Panel(
         info,
-        title="[bold]AI_MCP — RTL agent[/bold]",
+        title="[bold green]AI_MCP — RTL agent[/bold green]",
         box=box.ROUNDED,
+        border_style="green",
         padding=(1, 2),
     )
+    _console.clear()
     _console.print(panel)
 
     # Prompt-toolkit session for readline-like history
@@ -268,7 +275,7 @@ def run(args: argparse.Namespace) -> None:
     while True:
         orch_short = _short_model(session.models.get("orchestrator", orchestrator_model))
         try:
-            text = ps.prompt(f"[{session.phase.value} | {orch_short}]> ")
+            text = ps.prompt(HTML(f"<ansiblue>[{session.phase.value} | {orch_short}]&gt; </ansiblue>"))
         except EOFError:
             print("\nbye")
             return

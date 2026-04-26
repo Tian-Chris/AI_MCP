@@ -130,6 +130,7 @@ class LLMClient:
             kwargs["api_key"] = self.api_key
 
         # --- Call litellm (exceptions propagate) ---------------------------
+        kwargs.setdefault("timeout", 120)
         raw = litellm.completion(**kwargs)
 
         # --- Parse response ------------------------------------------------

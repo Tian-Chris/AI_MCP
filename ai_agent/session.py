@@ -31,12 +31,20 @@ class Spec:
 
 
 @dataclass
+class TestStatus:
+    name: str
+    status: Literal["pending", "verified", "failed"] = "pending"
+    reason: str = ""
+
+
+@dataclass
 class TestResult:
     phase: Literal["lint", "build", "sim", "waveform", "pass"]
     passed: bool
     stdout: str = ""
     stderr: str = ""
     waveform_path: Optional[Path] = None
+    tests: list[TestStatus] = field(default_factory=list)
 
 
 @dataclass
@@ -47,6 +55,7 @@ class Session:
     models: dict[str, str] = field(default_factory=dict) # role -> "provider/model"
     spec: Optional[Spec] = None
     last_test: Optional[TestResult] = None
+    tests: list[TestStatus] = field(default_factory=list)
     retry_count: int = 0
 
     def add_user(self, text: str) -> None:
