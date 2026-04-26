@@ -5,14 +5,12 @@ import os
 from pathlib import Path
 from typing import Callable, Optional
 
-from rich.console import Console
-
+from ai_agent._display import console as _console
 from ai_agent.session import Session, Phase
 from ai_agent.llm import LLMClient
 from ai_agent.agents import spec, writers, tester
 from ai_agent import tools as agent_tools
 
-_console = Console()
 _VERBOSE = os.environ.get("AI_MCP_VERBOSE", "").strip().lower() in ("1", "true", "yes")
 
 
@@ -102,6 +100,9 @@ def _build_tools_and_handlers(session: Session, root: Path):
         session.last_test = result
         stdout_tail = (result.stdout or "")[-1500:]
         stderr_tail = (result.stderr or "")[-1500:]
+        if getattr(result, "waveform_path", None) is not None:
+            from ai_agent._display import show_waveform
+            show_waveform(result.waveform_path)
         if result.passed:
             session.reset_retry()
             session.set_phase(Phase.IDLE)

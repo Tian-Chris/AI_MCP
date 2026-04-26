@@ -5,6 +5,8 @@ import subprocess
 import sys
 from pathlib import Path
 
+from ai_agent._display import show_file_write
+
 # ---------------------------------------------------------------------------
 # Import verilator_mcp and waveform_mcp from repo root
 # ---------------------------------------------------------------------------
@@ -248,7 +250,9 @@ def _handle_write_file(tool_input: dict, allowed_root: Path) -> str:
     p = _validate_path(tool_input["path"], allowed_root)
     p.parent.mkdir(parents=True, exist_ok=True)
     content = tool_input["content"]
+    _old = p.read_text(encoding="utf-8") if p.exists() else None
     p.write_text(content, encoding="utf-8")
+    show_file_write(p, _old, content)
     return f"wrote {len(content.encode('utf-8'))} bytes to {p}"
 
 

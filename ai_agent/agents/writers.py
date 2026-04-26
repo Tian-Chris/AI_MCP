@@ -8,6 +8,7 @@ from pathlib import Path
 from typing import Any
 
 from ai_agent.llm import LLMClient
+from ai_agent._display import show_file_write
 
 # Tool definition shared by both writers
 _SUBMIT_CODE_TOOL: dict[str, Any] = {
@@ -108,7 +109,9 @@ def _write_rtl(spec: dict[str, Any], llm: LLMClient, root: Path) -> Path:
         rtl_path = root / rtl_path
 
     rtl_path.parent.mkdir(parents=True, exist_ok=True)
+    _old = rtl_path.read_text(encoding="utf-8") if rtl_path.exists() else None
     rtl_path.write_text(code, encoding="utf-8")
+    show_file_write(rtl_path, _old, code)
     return rtl_path
 
 
@@ -133,7 +136,9 @@ def _write_tb(spec: dict[str, Any], llm: LLMClient, root: Path) -> Path:
         tb_path = root / tb_path
 
     tb_path.parent.mkdir(parents=True, exist_ok=True)
+    _old = tb_path.read_text(encoding="utf-8") if tb_path.exists() else None
     tb_path.write_text(code, encoding="utf-8")
+    show_file_write(tb_path, _old, code)
     return tb_path
 
 

@@ -8,16 +8,13 @@ from pathlib import Path
 
 from prompt_toolkit import PromptSession
 from prompt_toolkit.history import InMemoryHistory
-from rich.console import Console
 from rich.markdown import Markdown
 from rich.panel import Panel
-from rich.table import Table
 from rich.text import Text
 from rich import box
 
-_console = Console()
-
 from ai_agent.agents.orchestrator import run_orchestrator_turn
+from ai_agent._display import show_waveform, console as _console
 from .session import Session, Phase
 from .llm import LLMClient
 from . import config
@@ -101,6 +98,7 @@ Available commands:
   /auth status              List all stored provider keys
   /auth login [provider]    Add/replace a key (full wizard if no provider given)
   /auth logout <provider>   Remove stored key for provider (prompts confirmation)
+  /wave [path]              Show the last (or given) .vcd waveform in gtkwave
 """
 
 
@@ -186,6 +184,17 @@ def handle_slash(
         else:
             print(f"unknown /auth sub-command '{sub}'; use status|login|logout", file=sys.stderr)
 
+    elif cmd == "/wave":
+        target: Path | None = None
+        if len(parts) > 1:
+            target = Path(parts[1]).expanduser().resolve()
+        elif session.last_test is not None and getattr(session.last_test, "waveform_path", None) is not None:
+            target = session.last_test.waveform_path
+        if target is None:
+            _console.print("[yellow]No waveform available. Run a sim first or pass a path: /wave path/to.vcd[/yellow]")
+        else:
+            show_waveform(target)
+
     else:
         print(f"unknown command '{cmd}', /help for list", file=sys.stderr)
 
@@ -238,14 +247,6 @@ def run(args: argparse.Namespace) -> None:
     except ValueError:
         cwd_str = str(cwd)
 
-    logo = Text(
-        "████████\n"
-        "████████\n"
-        "████████\n"
-        "████████",
-        style="cyan on cyan",
-    )
-
     info = Text()
     info.append(f"orchestrator : {_short_model(session.models['orchestrator'])}\n")
     info.append(f"spec         : {_short_model(session.models['spec'])}\n")
@@ -253,13 +254,8 @@ def run(args: argparse.Namespace) -> None:
     info.append(f"cwd          : {cwd_str}\n\n")
     info.append("type /help for commands, /exit to quit")
 
-    grid = Table.grid(padding=(0, 3))
-    grid.add_column()
-    grid.add_column()
-    grid.add_row(logo, info)
-
     panel = Panel(
-        grid,
+        info,
         title="[bold]AI_MCP — RTL agent[/bold]",
         box=box.ROUNDED,
         padding=(1, 2),
